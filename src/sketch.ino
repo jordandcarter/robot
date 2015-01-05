@@ -5,6 +5,7 @@
 #include "RTFusionRTQF.h" 
 #include "CalLib.h"
 #include <EEPROM.h>
+#include "Pid.h"
 
 RTIMU *imu;                                           // the IMU object
 RTFusionRTQF fusion;                                  // the fusion object
@@ -19,6 +20,8 @@ unsigned long lastRate;
 unsigned long buzzTime = 0;
 unsigned long silentTime = 0;
 boolean buzz = true;
+
+Pid pitchPid;
 
 void setup()
 {
@@ -37,18 +40,25 @@ void setup()
   //else
     //Serial.println("No valid compass calibration data");
 
+  pitchPid = Pid::Pid(0, 0, 0)  //http://en.wikipedia.org/wiki/PID_controller#Manual_tuning
+
   lastDisplay = lastRate = millis();
 }
 
 RTVector3 q;
 
 unsigned long now;
-  
+
 void loop()
 {  
   now = millis();
   tryReadIMU();
   buzz();
+}
+
+void pid(double setpoint, )
+{
+  
 }
 
 void tryReadIMU()
