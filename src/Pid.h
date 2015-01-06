@@ -9,8 +9,9 @@
 class Pid
 {
   public:
-    Pid(double Kp, double Ki, double Kd)
-    void loop(double dt; double target, double current);
+    Pid();
+    Pid(double Kp, double Ki, double Kd);
+    void loop(double dt, double target, double current);
     double output();
   private:
     double _target;

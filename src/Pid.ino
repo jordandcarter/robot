@@ -5,6 +5,18 @@
 */
 
 #include "Pid.h"
+#include "Arduino.h"
+
+Pid::Pid()
+{
+  _Kp = 0.1;
+  _Ki = 0;
+  _Kd = 0;
+  _proportionalTerm = 0;
+  _integralTerm = 0;
+  _derivativeTerm = 0;
+  _previousError = 0;
+}
 
 Pid::Pid(double Kp, double Ki, double Kd)
 {
@@ -19,11 +31,16 @@ Pid::Pid(double Kp, double Ki, double Kd)
 
 void Pid::loop(double dt, double target, double current)
 {
-  _error = target - current;
-  _integralTerm += _error*dt;
-  _derivativeTerm = (_error - _previousError)/dt;
+  if (dt <= 0){
+    dt = 0.000000001;
+  }
+  _proportionalTerm = target - current;
+  if(abs(_integralTerm + (_proportionalTerm*dt)) < 4000){
+    _integralTerm += _proportionalTerm*dt;
+  }
+  _derivativeTerm = (_proportionalTerm - _previousError)/dt;
   _output = _Kp*_proportionalTerm + _Ki*_integralTerm + _Kd*_derivativeTerm;
-  _previousError = _error;
+  _previousError = _proportionalTerm;
 }
 
 double Pid::output()
