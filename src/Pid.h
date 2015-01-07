@@ -11,7 +11,7 @@ class Pid
   public:
     Pid();
     Pid(double Kp, double Ki, double Kd);
-    void loop(double dt, double target, double current);
+    void loop(unsigned long dt, double target, double current);
     double output();
   private:
     double _target;
@@ -28,3 +28,4 @@ class Pid
 };
 
 #endif
+

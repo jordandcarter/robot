@@ -1,3 +1,5 @@
+#include <Sabertooth.h>
+
 #include <Wire.h>                                     // Gyro SDA SCL library
 #include "I2Cdev.h"
 #include "RTIMUSettings.h"
@@ -6,7 +8,6 @@
 #include "CalLib.h"
 #include <EEPROM.h>
 #include "Pid.h"
-#include <Servo.h>
 
 
 RTIMU *imu;                                           // the IMU object
@@ -25,21 +26,27 @@ double currentPitch = 0;
 
 Pid pitchPid;
 
-Servo leftMotor;
-Servo rightMotor;
+Sabertooth ST(128);
 
-double motorLimiter = 0.4;
+double motorLimiter = 0.6;
 
 RTVector3 q;
 
 unsigned long now;
 unsigned long previousNow;
 
+double centrePoint = 5.5;
+double rightBias = 4;
+double leftBias = 3;
+boolean useSerial = false;
+
 void setup()
 {
   int errcode;
-
-  Serial.begin(SERIAL_PORT_SPEED);
+   
+  if (useSerial){
+    Serial.begin(SERIAL_PORT_SPEED);
+  }
   Wire.begin();
   imu = RTIMU::createIMU(&settings);                        // create the imu object
 
@@ -47,10 +54,11 @@ void setup()
     //  Display error somehow
   }
 
-  leftMotor.write(90);
-  leftMotor.attach(6);
-  rightMotor.write(90);
-  rightMotor.attach(7);
+  SabertoothTXPinSerial.begin(38400); // Serial1
+  delay(50);
+  ST.setRamping(1);
+  ST.drive(0); // The Sabertooth won't act on mixed mode packet serial commands until
+  ST.turn(0);
 
   //if (imu->getCalibrationValid()){
   //  Serial.println("Using compass calibration");
@@ -58,73 +66,120 @@ void setup()
   //  Serial.println("No valid compass calibration data");
   //}
 
-  pitchPid = Pid(1, 0.01, 5);  //http://en.wikipedia.org/wiki/PID_controller#Manual_tuning
-
-  now = previousNow = lastRate = millis();
+  //http://en.wikipedia.org/wiki/PID_controller#Manual_tuning
+  pitchPid = Pid(5, 0.00005, 0);
+  
+  lastRate = millis();
+  previousNow = now = micros();
+  digitalWrite(8, HIGH);
+  delay(50);
+  digitalWrite(8, LOW);
+  delay(1000);
+  digitalWrite(8, HIGH);
+  delay(100);
+  digitalWrite(8, LOW);
 }
 
 double dt;
+int initing = 0;
+boolean initd = false;
 
 void loop()
 {
-  now = millis();
-  dt = now - previousNow;
-  tryReadIMU();
-  pitchPid.loop(dt, 0, currentPitch);
-  //Serial.println(pitchPid.output());
-  if (upright(currentPitch)){
-    setMotors(pitchPid.output());
-  } else {
-    stopMotors();
-  }
+  if(initd){
+    now = micros();
+    dt = now - previousNow;
+    tryReadIMU();
+    pitchPid.loop(dt, 0, currentPitch);
+    if (useSerial){
+      Serial.println(currentPitch);
+    }
+    if (upright(currentPitch)){
+      setMotors(pitchPid.output());
+    } else {
+      stopMotors();
+    }
+    
+    //Serial.println(dt);
   
-  //Serial.println(dt);
-
-  //buzzer();
-
-  previousNow = now;
-}
+    //buzzer();
+  
+    previousNow = now;
+  } else {
+    tryReadIMU();
+    initing++;
+    if (initing > 1000){
+      initd = true;
+      digitalWrite(8, HIGH);
+      delay(60);
+      digitalWrite(8, LOW);
+      delay(10);
+      digitalWrite(8, HIGH);
+      delay(25);
+      digitalWrite(8, LOW);
+      delay(10);
+      digitalWrite(8, HIGH);
+      delay(60);
+      digitalWrite(8, LOW);
+      delay(10);
+      digitalWrite(8, HIGH);
+      delay(25);
+      digitalWrite(8, LOW);
+      delay(10);
+      digitalWrite(8, HIGH);
+      delay(60);
+      digitalWrite(8, LOW);
+      delay(10);
+      digitalWrite(8, HIGH);
+      delay(25);
+      digitalWrite(8, LOW);
+      delay(10);  
+    }
+  }
+ }
 
 boolean upright(double pitch)
 {
-  return pitch < 50 && pitch > -50;
+  return pitch < 20 && pitch > -20;
 }
 
 void setMotors(double s)
 {
-  int right = (int)motorSpeed(motorLimiter, s);
-  int left = 90 - (right - 90);
-  rightMotor.write(right+3);
-  leftMotor.write(left+3);
-  Serial.print(left);
-  Serial.print(" | ");
-  Serial.println(right);
+  int speed = (int)motorSpeed(motorLimiter, s);
+  ST.drive(speed);
+  //ST.motor(1, 5);//right reverse
+  //ST.motor(2, -5);//left reverse
+  //ST.motor(1, -5);//right fwd
+  //ST.motor(2, 5);//left fwd
+  if (useSerial){
+    Serial.print(speed);
+  }
 }
 
 void stopMotors()
 {
-  Serial.println("stopMotors");
-  leftMotor.write(93);
-  rightMotor.write(93);
+  if (useSerial){
+    Serial.println("stopMotors");
+  }
+  ST.drive(0);
 }
 
 double motorSpeed(double limiter, double speed)
 {
   // Adjustable failsafe
-  if (speed > 90*limiter){
-    speed = 90*limiter;
-  } else if (speed < -90*limiter){
-    speed = -90*limiter;
+  if (speed > 127*limiter){
+    speed = 127*limiter;
+  } else if (speed < -127*limiter){
+    speed = -127*limiter;
   }
 
   // Hard failsafe
-  if (speed > 90){
-    speed = 90;
-  } else if (speed < -90){
-    speed = -90;
+  if (speed > 127){
+    speed = 127;
+  } else if (speed < -127){
+    speed = -127;
   }
-
-  return 90 + speed;
+  return speed;
 }
 
 void tryReadIMU()
@@ -142,7 +197,7 @@ void tryReadIMU()
 
     q = (RTVector3&)fusion.getFusionPose();
 
-    currentPitch = double(q.y() * 57.2957795) + 4;
+    currentPitch = double(q.y() * 57.2957795) + centrePoint;
     //Serial.println(currentPitch);
   }
 }
@@ -160,3 +215,4 @@ void buzzer()
     digitalWrite(8, HIGH);
   }
 }
+

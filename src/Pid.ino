@@ -29,13 +29,13 @@ Pid::Pid(double Kp, double Ki, double Kd)
   _previousError = 0;
 }
 
-void Pid::loop(double dt, double target, double current)
+void Pid::loop(unsigned long dt, double target, double current)
 {
   if (dt <= 0){
-    dt = 0.000000001;
+    dt = 4;
   }
   _proportionalTerm = target - current;
-  if(abs(_integralTerm + (_proportionalTerm*dt)) < 4000){
+  if(abs(_integralTerm + (_proportionalTerm*dt)) < 400000){
     _integralTerm += _proportionalTerm*dt;
   }
   _derivativeTerm = (_proportionalTerm - _previousError)/dt;
@@ -47,3 +47,4 @@ double Pid::output()
 {
   return _output;
 }
+
