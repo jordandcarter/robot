@@ -25,10 +25,11 @@ boolean buzz = true;
 double currentPitch = 0;
 
 Pid pitchPid;
+Pid positionPid;
 
 Sabertooth ST(128);
 
-double motorLimiter = 0.6;
+double motorLimiter = 0.7;
 
 RTVector3 q;
 
@@ -39,6 +40,14 @@ double centrePoint = 5.5;
 double rightBias = 4;
 double leftBias = 3;
 boolean useSerial = false;
+
+#define leftEncoder1 2 // White wire
+#define leftEncoder2 4 // Yellow wire
+#define rightEncoder1 3 // Yellow wire
+#define rightEncoder2 5 // White wire
+
+volatile long leftCounter = 0;
+volatile long rightCounter = 0;
 
 void setup()
 {
@@ -54,12 +63,6 @@ void setup()
     //  Display error somehow
   }
 
-  SabertoothTXPinSerial.begin(38400); // Serial1
-  delay(50);
-  ST.setRamping(1);
-  ST.drive(0); // The Sabertooth won't act on mixed mode packet serial commands until
-  ST.turn(0);
-
   //if (imu->getCalibrationValid()){
   //  Serial.println("Using compass calibration");
   //} else {
@@ -67,7 +70,8 @@ void setup()
   //}
 
   //http://en.wikipedia.org/wiki/PID_controller#Manual_tuning
-  pitchPid = Pid(5, 0.00005, 0);
+  pitchPid = Pid(11, 0, 100);
+  positionPid = Pid(0,0,0);//0.0005, 0, 0);
   
   lastRate = millis();
   previousNow = now = micros();
@@ -78,11 +82,28 @@ void setup()
   digitalWrite(8, HIGH);
   delay(100);
   digitalWrite(8, LOW);
+  
+  pinMode(leftEncoder1,INPUT);
+  pinMode(leftEncoder2,INPUT);
+  pinMode(rightEncoder1,INPUT);
+  pinMode(rightEncoder2,INPUT); 
+  attachInterrupt(0,leftEncoder,FALLING); // pin 2
+  attachInterrupt(1,rightEncoder,FALLING); // pin 3
+  SabertoothTXPinSerial.begin(38400); // Serial1
+  ST.setRamping(1);
+  ST.drive(0); // The Sabertooth won't act on mixed mode packet serial commands until
+  ST.turn(0);
 }
 
 double dt;
 int initing = 0;
 boolean initd = false;
+
+double positionOutput = 0;
+int   STD_LOOP_TIME  =  9;
+int lastLoopTime = STD_LOOP_TIME;
+int lastLoopUsefulTime = STD_LOOP_TIME;
+unsigned long loopStartTime = 0;
 
 void loop()
 {
@@ -90,9 +111,19 @@ void loop()
     now = micros();
     dt = now - previousNow;
     tryReadIMU();
-    pitchPid.loop(dt, 0, currentPitch);
+    positionPid.loop(dt, 0, (leftCounter + rightCounter)/2);
+    positionOutput = positionPid.output();
+    if (positionOutput > 15){
+      positionOutput = 15;
+    } else if (positionOutput < -15){
+      positionOutput = -15;
+    }
+    pitchPid.loop(dt, -positionOutput, -currentPitch);
     if (useSerial){
-      Serial.println(currentPitch);
+      Serial.println(pitchPid.output());
+      //Serial.print(leftCounter);
+      //Serial.print(" | ");
+      //Serial.println(rightCounter);
     }
     if (upright(currentPitch)){
       setMotors(pitchPid.output());
@@ -108,7 +139,7 @@ void loop()
   } else {
     tryReadIMU();
     initing++;
-    if (initing > 1000){
+    if (millis() > 3000){
       initd = true;
       digitalWrite(8, HIGH);
       delay(60);
@@ -136,6 +167,10 @@ void loop()
       delay(10);  
     }
   }
+  lastLoopUsefulTime = millis()-loopStartTime;
+  if(lastLoopUsefulTime<STD_LOOP_TIME)         delay(STD_LOOP_TIME-lastLoopUsefulTime);
+  lastLoopTime = millis() - loopStartTime;
+  loopStartTime = millis();
  }
 
 boolean upright(double pitch)
@@ -152,7 +187,7 @@ void setMotors(double s)
   //ST.motor(1, -5);//right fwd
   //ST.motor(2, 5);//left fwd
   if (useSerial){
-    Serial.print(speed);
+    //Serial.println(speed);
   }
 }
 
@@ -216,3 +251,18 @@ void buzzer()
   }
 }
 
+/* Interrupt routine and encoder read functions - I read using the port registers for faster processing */
+void leftEncoder() {
+  if(PING & 0b00100000){ // read pin 4
+    leftCounter++;
+  } else {
+    leftCounter--;
+  }    
+}
+void rightEncoder() {
+  if(PINE & 0b00001000){ // read pin 5
+    rightCounter++;
+  } else {
+    rightCounter--;
+  }  
+}

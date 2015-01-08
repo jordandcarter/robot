@@ -45,6 +45,6 @@ void Pid::loop(unsigned long dt, double target, double current)
 
 double Pid::output()
 {
-  return _output;
+  return -_output;
 }
 
