@@ -39,7 +39,7 @@ unsigned long previousNow;
 double centrePoint = 5.5;
 double rightBias = 4;
 double leftBias = 3;
-boolean useSerial = false;
+boolean useSerial = true;
 
 #define leftEncoder1 2 // White wire
 #define leftEncoder2 4 // Yellow wire
@@ -48,6 +48,10 @@ boolean useSerial = false;
 
 volatile long leftCounter = 0;
 volatile long rightCounter = 0;
+
+#define switch1 22
+#define switch2 24
+#define switch3 26
 
 void setup()
 {
@@ -89,6 +93,11 @@ void setup()
   pinMode(rightEncoder2,INPUT); 
   attachInterrupt(0,leftEncoder,FALLING); // pin 2
   attachInterrupt(1,rightEncoder,FALLING); // pin 3
+  
+  pinMode(switch1, INPUT_PULLUP);
+  pinMode(switch2, INPUT_PULLUP);
+  pinMode(switch3, INPUT_PULLUP);
+  
   SabertoothTXPinSerial.begin(38400); // Serial1
   ST.setRamping(1);
   ST.drive(0); // The Sabertooth won't act on mixed mode packet serial commands until
@@ -100,10 +109,12 @@ int initing = 0;
 boolean initd = false;
 
 double positionOutput = 0;
-int   STD_LOOP_TIME  =  9;
+int STD_LOOP_TIME  =  9;
 int lastLoopTime = STD_LOOP_TIME;
 int lastLoopUsefulTime = STD_LOOP_TIME;
 unsigned long loopStartTime = 0;
+
+unsigned long tick = 0;
 
 void loop()
 {
@@ -120,7 +131,7 @@ void loop()
     }
     pitchPid.loop(dt, -positionOutput, -currentPitch);
     if (useSerial){
-      Serial.println(pitchPid.output());
+      //Serial.println(pitchPid.output());
       //Serial.print(leftCounter);
       //Serial.print(" | ");
       //Serial.println(rightCounter);
@@ -167,6 +178,25 @@ void loop()
       delay(10);  
     }
   }
+  if (tick % 10 == 0) {
+    if (digitalRead(switch1) == 0){
+      Serial.print("1,");
+    } else {
+      Serial.print("0,");
+    }
+    if (digitalRead(switch2) == 0){
+      Serial.print("1,");
+    } else {
+      Serial.print("0,");
+    }
+    if (digitalRead(switch3) == 0){
+      Serial.println("1");
+    } else {
+      Serial.println("0");
+    }
+  }
+  
+  tick++;
   lastLoopUsefulTime = millis()-loopStartTime;
   if(lastLoopUsefulTime<STD_LOOP_TIME)         delay(STD_LOOP_TIME-lastLoopUsefulTime);
   lastLoopTime = millis() - loopStartTime;
@@ -194,7 +224,7 @@ void setMotors(double s)
 void stopMotors()
 {
   if (useSerial){
-    Serial.println("stopMotors");
+    //Serial.println("stopMotors");
   }
   ST.drive(0);
 }
